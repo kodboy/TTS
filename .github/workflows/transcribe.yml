@@ -1,6 +1,6 @@
 name: Speech Transcription Pipeline
 
-on:
+"on":
   workflow_dispatch:
     inputs:
       language:
