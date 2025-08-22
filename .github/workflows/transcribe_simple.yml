@@ -45,6 +45,7 @@ jobs:
     - name: Test core functionality
       run: |
         python test_transcribe.py
+        python test_fallback.py
         
     - name: Run transcription with approximate speakers
       run: |
