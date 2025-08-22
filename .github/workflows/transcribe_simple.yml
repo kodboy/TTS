@@ -42,6 +42,10 @@ jobs:
         # Install core dependencies for transcription
         pip install faster-whisper soundfile numpy tqdm
         
+    - name: Test core functionality
+      run: |
+        python test_transcribe.py
+        
     - name: Run transcription with approximate speakers
       run: |
         python scripts/transcribe_dialogue.py \

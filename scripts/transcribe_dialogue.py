@@ -98,7 +98,19 @@ def get_device(device_arg):
 def transcribe_audio(audio_path, model_size="medium", language="auto", device="auto"):
     """Transcribe audio using Whisper."""
     print(f"Loading Whisper model: {model_size}")
-    model = WhisperModel(model_size, device=get_device(device))
+    
+    # Try to load model, first allowing downloads, then local-only if that fails
+    try:
+        model = WhisperModel(model_size, device=get_device(device))
+    except Exception as e:
+        print(f"Failed to load model with downloads enabled: {e}")
+        print("Trying to load from local cache only...")
+        try:
+            model = WhisperModel(model_size, device=get_device(device), local_files_only=True)
+        except Exception as e2:
+            print(f"Failed to load model from local cache: {e2}")
+            print("Model not available locally. In GitHub Actions, this will be downloaded automatically.")
+            raise e2
     
     print(f"Transcribing audio: {audio_path}")
     if language == "auto":
