@@ -1,0 +1,142 @@
+name: Speech Transcription Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      language:
+        description: 'Language code for transcription (e.g., zh, en)'
+        required: false
+        default: 'zh'
+      speaker_names:
+        description: 'Speaker names separated by comma'
+        required: false
+        default: '甲,乙'
+      include_timestamps:
+        description: 'Include timestamps in output'
+        required: false
+        type: boolean
+        default: true
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  transcribe:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Verify Hugging Face token
+      run: |
+        if [ -z "${{ secrets.HUGGINGFACE_TOKEN }}" ]; then
+          echo "❌ Error: HUGGINGFACE_TOKEN secret is not set!"
+          echo ""
+          echo "To fix this issue:"
+          echo "1. Go to your repository on GitHub"
+          echo "2. Navigate to Settings → Secrets and variables → Actions"
+          echo "3. Click 'New repository secret'"
+          echo "4. Name: HUGGINGFACE_TOKEN"
+          echo "5. Value: Your Hugging Face read token (get it from https://huggingface.co/settings/tokens)"
+          echo "6. Click 'Add secret'"
+          echo ""
+          echo "The Hugging Face token is required to access pyannote.audio speaker diarization models."
+          exit 1
+        else
+          echo "✅ HUGGINGFACE_TOKEN secret is configured"
+        fi
+        
+    - name: Run speech transcription
+      env:
+        HUGGINGFACE_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }}
+      run: |
+        # Set parameters based on trigger type
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          LANGUAGE="${{ github.event.inputs.language }}"
+          SPEAKER_NAMES="${{ github.event.inputs.speaker_names }}"
+          TIMESTAMPS_FLAG=""
+          if [ "${{ github.event.inputs.include_timestamps }}" = "true" ]; then
+            TIMESTAMPS_FLAG="--timestamps"
+          fi
+        else
+          # Default parameters for pull_request trigger
+          LANGUAGE="zh"
+          SPEAKER_NAMES="甲,乙"
+          TIMESTAMPS_FLAG="--timestamps"
+        fi
+        
+        echo "Running transcription with:"
+        echo "  Language: $LANGUAGE"
+        echo "  Speaker names: $SPEAKER_NAMES"
+        echo "  Include timestamps: $([ -n "$TIMESTAMPS_FLAG" ] && echo "Yes" || echo "No")"
+        echo "  Audio file: 20250822_144051.m4a"
+        
+        python scripts/transcribe_dialogue.py \
+          --audio "20250822_144051.m4a" \
+          --language "$LANGUAGE" \
+          --speaker-names "$SPEAKER_NAMES" \
+          --hf-token "$HUGGINGFACE_TOKEN" \
+          --device cpu \
+          $TIMESTAMPS_FLAG
+          
+    - name: Upload dialogue transcript
+      uses: actions/upload-artifact@v4
+      with:
+        name: dialogue-output
+        path: "20250822_144051_dialogue.txt"
+        retention-days: 30
+        
+    - name: Display transcript preview
+      run: |
+        echo "📝 Transcript Preview (first 20 lines):"
+        echo "========================================"
+        head -20 "20250822_144051_dialogue.txt" || echo "Transcript file not found"
+        echo "========================================"
+        echo "📁 Full transcript uploaded as artifact 'dialogue-output'"
+
+# Instructions for repository maintainers:
+#
+# 🔑 REQUIRED SETUP:
+# Before running this workflow, you must set up a Hugging Face access token:
+#
+# 1. Get a Hugging Face read token:
+#    - Go to https://huggingface.co/settings/tokens
+#    - Create a new token with 'read' permissions
+#    - Copy the token value
+#
+# 2. Add the token to GitHub repository secrets:
+#    - Go to your repository → Settings → Secrets and variables → Actions
+#    - Click "New repository secret"
+#    - Name: HUGGINGFACE_TOKEN
+#    - Value: [paste your Hugging Face token]
+#    - Click "Add secret"
+#
+# 🚀 HOW TO RUN:
+# - Manual run: Go to Actions tab → "Speech Transcription Pipeline" → "Run workflow"
+# - Automatic: Create a pull request (will run with default Chinese settings)
+#
+# 📊 OUTPUT:
+# The workflow will generate a dialogue transcript file that can be downloaded
+# from the workflow run artifacts section.
+#
+# 🎯 Default Configuration:
+# - Language: Chinese (zh)
+# - Speaker names: 甲 (Speaker A), 乙 (Speaker B)  
+# - Timestamps: Included
+# - Device: CPU (for compatibility)
+# - Model: Whisper large-v3
