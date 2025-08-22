@@ -1,0 +1,71 @@
+name: Transcribe (simple)
+
+on:
+  workflow_dispatch:
+    inputs:
+      audio_file:
+        description: 'Audio file name (default: 20250822_144051.m4a)'
+        required: false
+        default: '20250822_144051.m4a'
+      language:
+        description: 'Language code (default: zh)'
+        required: false
+        default: 'zh'
+      speaker_names:
+        description: 'Speaker names (default: 甲,乙)'
+        required: false
+        default: '甲,乙'
+
+jobs:
+  transcribe:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install ffmpeg
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # Install CPU-only PyTorch to save space and time
+        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+        # Install core dependencies for transcription
+        pip install faster-whisper soundfile numpy tqdm
+        
+    - name: Test core functionality
+      run: |
+        python test_transcribe.py
+        python test_fallback.py
+        
+    - name: Run transcription with approximate speakers
+      run: |
+        python scripts/transcribe_dialogue.py \
+          --audio ${{ github.event.inputs.audio_file || '20250822_144051.m4a' }} \
+          --language ${{ github.event.inputs.language || 'zh' }} \
+          --speaker-names "${{ github.event.inputs.speaker_names || '甲,乙' }}" \
+          --timestamps \
+          --approx-speakers
+          
+    - name: Upload dialogue output
+      uses: actions/upload-artifact@v4
+      with:
+        name: dialogue-output
+        path: '*_dialogue.txt'
+        retention-days: 30
+
+# Notes:
+# - This workflow uses approximate speaker labeling and does not require a HuggingFace token
+# - Speakers are assigned using simple heuristics based on timing and pauses
+# - For more accurate speaker identification, use the diarization-enabled workflow with a HF token
+# - The workflow installs minimal dependencies for faster execution
+# - Audio file must be present in the repository root
